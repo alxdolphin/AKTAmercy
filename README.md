@@ -86,7 +86,7 @@ pip install -r requirements.txt
 
 | | UNICORN | CHROMAUTOGRAM |
 |:---:|:---:|:---:|
-| **Lectin** | <sub><img src="data/DONE/_sample/UNICORN_LEC.png" width="400"></sub> | <sub><img src="data/CHROM/_sample/CHROMER_LEC.jpg" width="400">
+| **Lectin** | <sub><img src="data/DONE/_sample/UNICORN_LEC.png" width="400"></sub> | <sub><img src="data/DONE/_sample/CHROMER_LEC.jpg" width="400">
 </sub> |
 
 <center>
