@@ -1,0 +1,31 @@
+{
+    "paths": {
+        "unicorns": "./data/DROP-OFF/",
+        "run_folder_base": "./data/DONE/",
+        "credentials": "./dev/.rsc/AKTAmercy.json",
+        "brain": "./data/brain.json"
+    },
+    "spreadsheets": {
+        "queue": "Protein Queue",
+        "matrix": "_CHROMATRIX_"
+    },
+    "mode": "local",
+    "plotting": {
+        "params": {
+            "legend.fontsize": "large",      
+            "figure.figsize": [10, 6],       
+            "axes.labelsize": "medium",      
+            "axes.titlesize": "large",       
+            "xtick.labelsize": "small",
+            "xtick.major.size": 10,
+            "xtick.major.pad": 10,
+            "ytick.labelsize": "small",      
+            "axes.grid": true,               
+            "grid.alpha": 0.5,               
+            "axes.edgecolor": "black",       
+            "axes.linewidth": 0.8,           
+            "lines.linewidth": 2,            
+            "lines.markersize": 6
+        }
+    }
+}
