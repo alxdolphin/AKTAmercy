@@ -1,0 +1,13 @@
+# Python virtualenv (created by the Cursor Cloud update script)
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Local credentials (never commit)
+dev/.rsc/*.json
+
+# Runtime output (timestamped run folders + logs; keep committed _sample/)
+dev/debug/logs/
+data/DONE/20*/
