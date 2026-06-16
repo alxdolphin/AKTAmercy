@@ -5,9 +5,14 @@
 __pycache__/
 *.py[cod]
 
-# Local credentials (never commit)
+# Google credentials (Google layer is out of scope for local dev; never commit)
 dev/.rsc/*.json
 
-# Runtime output (timestamped run folders + logs; keep committed _sample/)
+# Proprietary UNICORN input data: in-scope to process locally, never committable
+data/DROP-OFF/*
+!data/DROP-OFF/.gitkeep
+
+# Runtime output (timestamped run folders + logs; committed data/DONE/_sample/ stays tracked)
 dev/debug/logs/
-data/DONE/20*/
+data/DONE/*/
+!data/DONE/_sample/
