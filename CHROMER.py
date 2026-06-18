@@ -4,9 +4,7 @@
 PROBLEMS
 - AFFINITY Chromatograms are numerically offset by an unknown factor (sample flow?)
 - Log files are filled with duplicate statements, and require a complementary script to clean up
-- BIG: Google's API requires re-authentication every 1 hour, which is a problem for long runs
 - Cleaning up of plot annotations (overlap, etc.)
-- Matrix system is hacky and needs to be reworked, preferably directly into the queue
 - Output organization is messy and needs to be reworked
 '''
 
@@ -26,13 +24,6 @@ import xml.etree.ElementTree as ET
 from collections import OrderedDict
 from zipfile import ZipFile, is_zipfile
 # import numpy as np # For peak detection | Not used - Scipy is more efficient
-
-## IMPORTS - GOOGLE API ##
-import gspread # For accessing the Queue and Matrix spreadsheets
-from pydrive.auth import GoogleAuth # For upload of chromatograms to Google Drive
-from pydrive.drive import GoogleDrive 
-from oauth2client.service_account import ServiceAccountCredentials
-import time # For exponential back-off when uploading to Google Drive | TODO: See if this is still necessary
 
 ## IMPORTS - PLOTTING ##
 import matplotlib.pylab as pylab # For plotting chromatograms
@@ -230,68 +221,24 @@ with open('config.json') as f:
     
 unicorns_path = config['paths']['unicorns']
 run_folder_base_path = config['paths']['run_folder_base']
-credentials_path = config['paths']['credentials']
-
-scopes = ["https://spreadsheets.google.com/feeds", 
-          "https://www.googleapis.com/auth/spreadsheets",
-          "https://www.googleapis.com/auth/drive.file", 
-          "https://www.googleapis.com/auth/drive"]
-
-creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, scopes)
-
-gauth = GoogleAuth()
-gauth.credentials = creds
-drive = GoogleDrive(gauth)
-gauth = GoogleAuth()
-gauth.credentials = creds
-drive = GoogleDrive(gauth)
-client = gspread.authorize(creds)
-queue_spreadsheet = config['spreadsheets']['queue']
-queue = client.open(queue_spreadsheet)
-matrix_spreadsheet = config['spreadsheets']['matrix'] # TODO: Write version without matrix
-matrix = client.open(matrix_spreadsheet)
 brain_path = config['paths']['brain']
-mode = config['mode']
 params = config['plotting']['params']
 
 ## LOGGER ##
 def setup_logger():
     logging.getLogger('matplotlib').setLevel(logging.WARNING)
-    logging.getLogger('oauth2client').setLevel(logging.WARNING)
-    logging.getLogger('googleapiclient').setLevel(logging.WARNING)
     logging.getLogger('pc_uni7').setLevel(logging.WARNING)
     log_filename = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '_chromatics.log'
-    log_filepath = os.path.join('./dev/debug/logs', log_filename)
+    log_dir = './dev/debug/logs'
+    os.makedirs(log_dir, exist_ok=True)
+    log_filepath = os.path.join(log_dir, log_filename)
     logging.basicConfig(filename=log_filepath, level=logging.DEBUG,
                         format='%(asctime)s [%(levelname)s] %(message)s\n\n',
                         datefmt='%Y-%m-%d %H:%M:%S')
     logging.info(f"CHROMER: Initialized at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")    
 
 ## CHROMATOGRAM-CONSTRUCT PAIRING ##
-def construct_recognition(queue, output_path):
-    worksheet_queue = queue.get_worksheet(0)
-    worksheet_antibodies = queue.get_worksheet(1)
-    values_queue = worksheet_queue.get_all_values()
-    values_antibodies = worksheet_antibodies.get_all_values()
-
-    filtered_queue = {
-        row[3].upper(): {"RowIndex": f"Queue!A{index+2}", "ConstructID": row[4], "Ext/1000": row[13], "MW/1000": row[15]} # TODO: Add SEC Column and Pooled fractionS
-        for index, row in enumerate(values_queue[1:]) if len(row) >= 16
-    }
-    filtered_antibodies = {
-        row[3].upper(): {"RowIndex": f"Antibodies!A{index+2}", "ConstructID": row[4], "Ext/1000": row[14], "MW/1000": row[16]} 
-        for index, row in enumerate(values_antibodies[1:]) if len(row) >= 16
-    }
-    consolidated_dict = {**filtered_queue, **filtered_antibodies}
-    consolidated_json = json.dumps(consolidated_dict, indent=4, sort_keys=True, ensure_ascii=False)
-    
-    try:
-        with open(output_path, 'w') as f:
-            f.write(consolidated_json)
-    except Exception as e:
-        logging.error(f"CHROMER: Failed to fetch updated Queue. Falling back to recent memory.\n    REASON: {e}")
-        return None
-def enable_cognition(file_path): # Kept as a seperate function in case internet access is not available
+def enable_cognition(file_path):
     try:
         with open(file_path) as f:
             brain = json.load(f)
@@ -388,44 +335,6 @@ def process_chrom(zip_file, brain):
 
     return {"udata": udata, "method": method, "batch": batch, "date": date, "construct_name": construct_name, "title": Title}
 
-def upload_file(drive, filepath, method, batch, brain, max_retries=5):
-    logging.info(f"CHROMER: Sending to the CHROMATRIX as {filepath}")
-
-    for n in range(max_retries):
-        try:
-            file = drive.CreateFile({'title': os.path.basename(filepath), 'parents': [{'id':'1-f-RQYJ_w_YAlcddoEfFmZzxAsyvLZEQ'}]})
-            file.SetContentFile(filepath)
-            file.Upload()
-
-            file_id = file['id']
-            file_link = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
-
-            if batch and batch.upper() in (key.upper() for key in brain):
-                try:    
-                    if 'Antibodies' in brain[batch.upper()]['RowIndex']:
-                        logging.info(f"CHROMER: {batch} is an antibody. Updating Antibodies sheet... {filepath}")
-                        worksheet = matrix.get_worksheet(1)
-                    else:
-                        logging.info(f"CHROMER: {batch} is a non-antibody protein. Updating Queue sheet... {filepath}")
-                        worksheet = matrix.get_worksheet(0)
-                
-                    column = 'E' if method != 'SEC' else 'F'
-                    cell = brain[batch.upper()]['RowIndex'].replace('A', column)
-                    worksheet.update_acell(cell.split('!')[1], file_link)
-                    
-                except Exception as e:
-                    logging.error(f"CHROMER: Unable to access CHROMATRIX.\n    REASON: {e}")
-                    raise e
-            break
-        except Exception as e:
-            if n < max_retries - 1: # if it's not the last attempt
-                sleep_time = 2 ** n  # Exponential back-off
-                time.sleep(sleep_time)
-                logging.warning(f"CHROMER: Exhausted API allowance. Sleeping {sleep_time} seconds before recalling...")
-            else:
-                logging.error("CHROMER: Max retries exceeded. Failing...")
-                raise e
-
 def annotate_fractions(host, frac_data, injection_time=0):
     for i in range(len(frac_data)):
         adjusted_x = frac_data[i][0] - injection_time
@@ -446,10 +355,10 @@ def plot_data(host, x_values, y_values, color='blue', linewidth=5, label='UV 280
     host.plot(x_values, y_values, color=color, linewidth=linewidth, label=label)
     return host
 
-def save_and_upload_plot(Title, method_folder, method, batch, brain):
+def save_plot(Title, method_folder):
     filename = os.path.join(method_folder, f"{Title}.jpg")
     plt.savefig(filename, bbox_inches='tight', dpi=300)
-    upload_file(drive, filename, method, batch, brain)
+    logging.info(f"CHROMER: Saved chromatogram to {filename}")
 
     
 def annotate_no_expression(host):
@@ -551,7 +460,7 @@ def chromeunicorns(zip_file, udata, run_folder, brain):
     plt.minorticks_on()
     plt.subplots_adjust(bottom=0.2)
     plt.tight_layout(pad=2)
-    save_and_upload_plot(Title, run_folder, method, batch, brain)
+    save_plot(Title, run_folder)
     plt.close()
     
 def process_file(root, run_folder, brain, file):
@@ -602,15 +511,9 @@ if __name__ == "__main__":
     setup_logger()
     pylab.rcParams.update(params)
 
-    try:
-        construct_recognition(queue, config['paths']['brain'])
-        brain = enable_cognition(config['paths']['brain'])
-    except Exception as e:
-        logging.warning(f"[UPDATES NOT FETCHED. ATTEMPTING TO LOAD MOST RECENT RECORD.]\n    REASON:{e}.", exc_INFO=True)
-        try:
-            brain = enable_cognition(config['paths']['brain'])
-        except Exception as e:
-            logging.error(f"[INDEX FAILED TO UPDATE AND FALLBACK WAS MISSING OR INVALID.]\n    REASON:{e}", exc_INFO=True)
+    brain = enable_cognition(config['paths']['brain'])
+    if brain is None:
+        logging.error("CHROMER: brain.json missing or invalid. Chromatogram recognition disabled.")
             
     all_files = []
     processed_files = set()  # set to keep track of processed files
