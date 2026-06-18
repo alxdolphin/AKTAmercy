@@ -1,5 +1,13 @@
 brain.json
 .DS_Store
+
+# Dev environment / generated artifacts
+.venv/
+__pycache__/
+*.pyc
+data/DROP-OFF/
+data/DONE/2*/
+dev/debug/logs/
 data/DROP-OFF/UNICORNS.UFol
 dev/debug/logs/20260616_135633_chromatics.log
 dev/debug/logs/20260616_144619_chromatics.log
