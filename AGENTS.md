@@ -10,9 +10,8 @@ JPGs. There is no server, web UI, or test/lint suite in the repo.
 - Dependencies live in a virtualenv at `.venv` (created by the startup update script).
   The repo README suggests conda, but conda is not installed here; use `.venv` + pip.
 - Run commands with the venv interpreter, e.g. `.venv/bin/python ./CHROMER.py`.
-- `requirements.txt` still lists `gspread`/`oauth2client`/`pydrive` from the pre-local
-  (Google Drive) era; the current code does not import them. The only runtime imports are
-  `matplotlib`, `scipy`, and `seaborn` (which pull in `numpy`/`pandas`).
+- The only runtime dependencies in `requirements.txt` are `matplotlib`, `scipy`, and
+  `seaborn` (which pull in `numpy`/`pandas`).
 
 ### Running the app
 - The app is headless-friendly: set `MPLBACKEND=Agg` to render without a display.
