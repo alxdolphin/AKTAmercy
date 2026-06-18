@@ -251,6 +251,9 @@ def enable_cognition(file_path):
 
 ## CHROMATOGRAM META-MINING ##
 def process_chrom(zip_file, brain):
+    if not brain:
+        raise ValueError("brain.json is required for construct recognition")
+
     udata = pc_uni7(zip_file)
     udata.load(show=False)
     udata.xml_parse(show=False)
@@ -377,14 +380,13 @@ def get_fraction_ranges(x_values, y_values, peaks, frac_data):
         frac_end = min(frac_data, key=lambda x: abs(x[0] - x_values[end]))[1]
         if frac_start and frac_end:
             frac_ranges.append((f"{frac_start}-{frac_end}", end))
-        return sorted(frac_ranges, key=lambda x: x[1])
+    return sorted(frac_ranges, key=lambda x: x[1])
 
 def annotate_fraction_ranges(host, frac_ranges):
     for i, (frac_range, end_frac_index) in enumerate(frac_ranges):
         host.text(1, 1.05, frac_range, ha='right', va='top', transform=host.transAxes, fontsize=24, fontweight='bold', color='black')
 
-def chromeunicorns(zip_file, udata, run_folder, brain):    
-    udata_INFO = process_chrom(zip_file, brain)
+def chromeunicorns(zip_file, udata_INFO, method_folder):
     udata = udata_INFO['udata']
     method = udata_INFO['method']
     batch = udata_INFO['batch']
@@ -392,8 +394,8 @@ def chromeunicorns(zip_file, udata, run_folder, brain):
     date = udata_INFO['date']
     
     
-    if 'Fractions' not in udata or None in [batch, method, Title] or "" in [batch, method, Title]:
-        print(f"CHROMER: Data for {zip_file} is invalid. Invalid: FRACTIONS - {udata.get('Fractions') is None}, BATCH - {batch is None}, METHOD - {method is None}. Skipping...")
+    if not udata or 'Fractions' not in udata or None in [batch, method, Title] or "" in [batch, method, Title]:
+        print(f"CHROMER: Data for {zip_file} is invalid. Invalid: FRACTIONS - {not udata or udata.get('Fractions') is None}, BATCH - {batch is None}, METHOD - {method is None}. Skipping...")
         return
 
 
@@ -460,48 +462,39 @@ def chromeunicorns(zip_file, udata, run_folder, brain):
     plt.minorticks_on()
     plt.subplots_adjust(bottom=0.2)
     plt.tight_layout(pad=2)
-    save_plot(Title, run_folder)
+    save_plot(Title, method_folder)
     plt.close()
-    
+
+def process_result_file(result_file, run_folder, brain):
+    logging.info(f"CHROMER: Processing {os.path.basename(result_file)}")
+    udata_INFO = process_chrom(result_file, brain)
+    if not udata_INFO:
+        return
+
+    method = udata_INFO['method']
+    batch = udata_INFO['batch']
+    Title = udata_INFO['title']
+
+    if batch is None or method is None or batch == "" or method == "" or "None" in Title:
+        logging.warning(f"CHROMER: Batch# or Method is missing or invalid. Skipping... {os.path.basename(result_file)}")
+        return
+
+    method_folder = os.path.join(run_folder, method)
+    os.makedirs(method_folder, exist_ok=True)
+    chromeunicorns(result_file, udata_INFO, method_folder)
+    os.remove(result_file)  # Delete the processed file
+
 def process_file(root, run_folder, brain, file):
     if file.endswith(".Result"):
-        logging.info(f"CHROMER: Processing {file}")
-        result_file = os.path.join(root, file)
-        udata_INFO = process_chrom(result_file, brain)
-        udata = udata_INFO['udata']
-        method = udata_INFO['method']
-        batch = udata_INFO['batch']
-        Title = udata_INFO['title']
-        
-        if batch is None or method is None or batch == "" or method == "" or "None" in Title:
-            logging.warning(f"CHROMER: Batch# or Method is missing or invalid. Skipping... {file}")
-        else:
-            method_folder = os.path.join(run_folder, method)
-            os.makedirs(method_folder, exist_ok=True)
-            chromeunicorns(result_file, udata_INFO['udata'], run_folder, brain)
-            os.remove(result_file)  # Delete the processed file | TODO: This doesn't actually work?
+        process_result_file(os.path.join(root, file), run_folder, brain)
     elif file.endswith(".UFol"):
         tar_file = os.path.join(root, file)
         with tarfile.open(tar_file, 'r') as tar:
-            tar.extractall(path=run_folder)
+            tar.extractall(path=run_folder, filter='data')
             for root, dirs, files in os.walk(run_folder):
                 for file in files:
                     if file.endswith(".Result"):
-                        logging.info(f"CHROMER: Processing {file}")
-                        result_file = os.path.join(root, file)
-                        udata_INFO = process_chrom(result_file, brain)
-                        udata = udata_INFO['udata']
-                        method = udata_INFO['method']
-                        batch = udata_INFO['batch']
-                        Title = udata_INFO['title']
-                        
-                        if batch is None or method is None or batch == "" or method == "" or "None" in Title:
-                            logging.warning(f"CHROMER: Batch# or Method is missing or invalid. Skipping... {file}")
-                        else:
-                            method_folder = os.path.join(run_folder, method)
-                            os.makedirs(method_folder, exist_ok=True)
-                            chromeunicorns(result_file, udata_INFO['udata'], run_folder, brain)
-                            os.remove(result_file)  # Delete the processed file
+                        process_result_file(os.path.join(root, file), run_folder, brain)
         
 if __name__ == "__main__":
     unicorns = config['paths']['unicorns']
@@ -514,6 +507,8 @@ if __name__ == "__main__":
     brain = enable_cognition(config['paths']['brain'])
     if brain is None:
         logging.error("CHROMER: brain.json missing or invalid. Chromatogram recognition disabled.")
+        # ponytail: local brain.json is required until construct recognition becomes optional.
+        raise SystemExit(1)
             
     all_files = []
     processed_files = set()  # set to keep track of processed files
