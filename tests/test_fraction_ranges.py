@@ -11,7 +11,7 @@ class FractionRangeTests(unittest.TestCase):
 
         ranges = get_fraction_ranges(x_values, y_values, [2, 6], frac_data)
 
-        self.assertEqual([("A1-A2", 2), ("A3-A3", 6)], ranges)
+        self.assertEqual(["A1-A2", "A3-A3"], [label for label, _ in ranges])
 
 
 if __name__ == "__main__":

@@ -399,7 +399,7 @@ def chromeunicorns(zip_file, udata_INFO, method_folder):
     
     if not udata or 'Fractions' not in udata or None in [batch, method, Title] or "" in [batch, method, Title]:
         print(f"CHROMER: Data for {zip_file} is invalid. Invalid: FRACTIONS - {not udata or udata.get('Fractions') is None}, BATCH - {batch is None}, METHOD - {method is None}. Skipping...")
-        return
+        return False
 
 
     plt.figure(figsize=(15, 10), edgecolor='black')
@@ -467,6 +467,7 @@ def chromeunicorns(zip_file, udata_INFO, method_folder):
     plt.tight_layout(pad=2)
     save_plot(Title, method_folder)
     plt.close()
+    return True
 
 def process_result_file(result_file, run_folder, brain):
     logging.info(f"CHROMER: Processing {os.path.basename(result_file)}")
@@ -484,8 +485,24 @@ def process_result_file(result_file, run_folder, brain):
 
     method_folder = os.path.join(run_folder, method)
     os.makedirs(method_folder, exist_ok=True)
-    chromeunicorns(result_file, udata_INFO, method_folder)
-    os.remove(result_file)  # Delete the processed file
+    processed = chromeunicorns(result_file, udata_INFO, method_folder)
+    if processed:
+        os.remove(result_file)  # Delete the processed file
+
+def _is_within_directory(directory, target):
+    abs_directory = os.path.abspath(directory)
+    abs_target = os.path.abspath(target)
+    return os.path.commonpath([abs_directory, abs_target]) == abs_directory
+
+def extractall_compat(tar, path):
+    try:
+        tar.extractall(path=path, filter='data')
+    except TypeError:
+        for member in tar.getmembers():
+            member_path = os.path.join(path, member.name)
+            if not _is_within_directory(path, member_path):
+                raise ValueError(f"Unsafe tar member path: {member.name}")
+        tar.extractall(path=path)
 
 def process_file(root, run_folder, brain, file):
     if file.endswith(".Result"):
@@ -493,7 +510,7 @@ def process_file(root, run_folder, brain, file):
     elif file.endswith(".UFol"):
         tar_file = os.path.join(root, file)
         with tarfile.open(tar_file, 'r') as tar:
-            tar.extractall(path=run_folder, filter='data')
+            extractall_compat(tar, run_folder)
             for root, dirs, files in os.walk(run_folder):
                 for file in files:
                     if file.endswith(".Result"):
