@@ -5,6 +5,7 @@ import json
 import argparse
 import sys
 import os
+original_cwd = os.getcwd()
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, repo_root)
 os.chdir(repo_root)
@@ -23,6 +24,10 @@ parser = argparse.ArgumentParser(description='Debug tool for inspecting chromato
 parser.add_argument('zip_file', type=str, help='Path to the .Result file to inspect.')
 args = parser.parse_args()
 
-result = process_chrom(args.zip_file, brain)
+zip_file = args.zip_file
+if not os.path.isabs(zip_file):
+    zip_file = os.path.abspath(os.path.join(original_cwd, zip_file))
+
+result = process_chrom(zip_file, brain)
 
 print(json.dumps(result, indent=4))

@@ -329,6 +329,9 @@ def process_chrom(zip_file, brain):
                     else:
                         construct_name = construct_name.replace("/", "-")
                         logging.info(f"CHROMER: Construct recognized as {construct_name}.")
+                else:
+                    logging.warning(f"CHROMER: SampleID ({batch}) was not found in brain.json. Skipping...")
+                    return None
                 
     Title = (f"{method}_{batch} | {construct_name}")
     logging.info(f"CHROMER: Success. Assigning index: {Title}")
