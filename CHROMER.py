@@ -325,7 +325,7 @@ def process_chrom(zip_file, brain):
                                 logging.info(f"CHROMER: Batch# matched from filename. Linking to... {batch}.")
                             else:
                                 logging.warning(f"CHROMER: Construct unrecognizable. Skipping...")
-                                return None, None, None
+                                return None
                     else:
                         construct_name = construct_name.replace("/", "-")
                         logging.info(f"CHROMER: Construct recognized as {construct_name}.")
@@ -505,7 +505,7 @@ if __name__ == "__main__":
     pylab.rcParams.update(params)
 
     brain = enable_cognition(config['paths']['brain'])
-    if brain is None:
+    if not brain:
         logging.error("CHROMER: brain.json missing or invalid. Chromatogram recognition disabled.")
         # ponytail: local brain.json is required until construct recognition becomes optional.
         raise SystemExit(1)
