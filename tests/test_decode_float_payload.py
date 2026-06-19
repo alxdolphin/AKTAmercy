@@ -2,7 +2,7 @@ import struct
 import unittest
 from unittest.mock import patch
 
-from CHROMER import (
+from chromer.unicorn import (
     MARKER_BYTE,
     decode_float_payload,
     validate_chrom_pair_lengths,
@@ -65,7 +65,7 @@ class DecodeFloatPayloadTests(unittest.TestCase):
         self.assertEqual("legacy", decoder)
         self.assertEqual(expected, values)
 
-    @patch("CHROMER.logging.warning")
+    @patch("chromer.unicorn.logging.warning")
     def test_length_validation_helper(self, mock_warning):
         validate_chrom_pair_lengths(
             "Chrom.1_2_True",

@@ -1,6 +1,6 @@
 # **Project AKTAmercy - "CHROMER"**
 
-[![VER](https://img.shields.io/badge/VERSION-1.0.0-darkgreen.svg)] |
+[![VER](https://img.shields.io/badge/VERSION-1.1.0-darkgreen.svg)] |
 [![DEV](https://img.shields.io/badge/DEVELOPMENT-MAINTENANCE-blue.svg)] |
 [![STATUS](https://img.shields.io/badge/STATUS-STABLE-darkgreen.svg)]
 
@@ -13,30 +13,10 @@ CHROMER is a Python automaton that post-processes chromatographic data from AKTA
 - **Peak Detection**: Detects peaks in the chromatogram and determines pool fractions based on peak area
 - **Local Output**: Writes compiled chromatograms to timestamped folders under `./data/DONE/`
 
-## Developmental Roadmap
-
-<details>
-<summary>
-<b> 1.0.0 </b> :white_check_mark: 
-</summary> 
-
-```diff
-Advancements
-+ SEC Chromatograms generated are now numerically accurate, accounting for flow rate and injection point.
-+ Index algorithm now covers a majority of targets
-+ Debug tools <b>?INSPECT</b> and <b>parseLOG</b> added to identify deviants easily.
-+ CHROMER -> CHROMER
-
-Regressions
-- Multiprocessing removed for simplicity, potential for reimplementation at later release
-- AFFINITY chromatograms are visually congruent, but numerically (x values / volume) incorrect.
-```
-</details>
-
 ## Known Issues and Limitations
 
 - **Sample metadata**: Sample_ID, method, and date are read from the UNICORN run log. Without `brain.json`, CHROMER runs in generic mode and titles chromatograms as `{METHOD}_{SAMPLE}`. With `brain.json`, indexed mode adds construct names to titles when the sample matches the index; unmatched samples still render with a generic title.
-- **Duplicate Logging**: Even without multiprocessing, the log generates duplicate lines for each sample. `parseLOG` is required to process logs when looking for deviants.
+- **Duplicate Logging**: Even without multiprocessing, the log generates duplicate lines for each sample. `chromer parse-log` summarizes warnings when looking for deviants.
 - **Pooling Fractions (AFFINITY)**: The implementation is incomplete, and lacks the ability to enumerate multiple peaks. Some of the pooling ranges are a bit too conservative.
 - **Plotting**: Revisions to the plotting are likely, to include more information and to make the plots more readable.
 
@@ -44,25 +24,31 @@ Please report any issues you encounter [here](https://github.com/alxdolphin/AKTA
 
 ## Usage
 
-To use CHROMER, you need Python installed on your system. A virtual environment via [Anaconda](https://www.anaconda.com/) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) is recommended.
+Requires Python 3.11+.
 
 ```bash
-# Create and activate the environment
-conda env create -f environment.yml
-conda activate CHROMER
-
-# Clone the repository
 git clone https://github.com/alxdolphin/AKTAmercy.git
 cd AKTAmercy
 
-# Place UNICORN files in the drop-off directory
-mkdir -p ./data/DROP-OFF
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
 
-# Run the script
-./CHROMER.py
+mkdir -p ./data/DROP-OFF
+MPLBACKEND=Agg chromer process
 ```
 
-The script processes all `.UFol` and `.Result` files in `./data/DROP-OFF/` and writes compiled chromatograms to `./data/DONE/<timestamp>/`, organized by purification method.
+CHROMER processes all `.UFol` and `.Result` files in `./data/DROP-OFF/` and writes compiled chromatograms to `./data/DONE/<timestamp>/`, organized by purification method.
+
+### CLI commands
+
+```bash
+chromer process [--config config.json]   # batch process DROP-OFF exports
+chromer inspect FILE [--config config.json]   # print parsed metadata as JSON
+chromer parse-log LOG_FILE               # extract and summarize WARNING lines
+```
+
+Paths in `config.json` resolve relative to the config file location.
 
 ## Construct Index (`brain.json`, optional)
 
@@ -101,6 +87,13 @@ Maintain `brain.json` manually or export from your lab's tracking system. CHROME
     },
     "plotting": { "params": { ... } }
 }
+```
+
+## Development
+
+```bash
+pip install -e .
+MPLBACKEND=Agg python -m unittest discover -s tests -v
 ```
 
 ## State of the Art - UNICORN vs CHROMER
