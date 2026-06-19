@@ -26,6 +26,8 @@ def extractall_compat(tar, path):
         tar.extractall(path=path, filter='data')
     except TypeError:
         for member in tar.getmembers():
+            if member.issym() or member.islnk() or member.isdev():
+                raise ValueError(f"Unsafe tar member type: {member.name}")
             member_path = os.path.join(path, member.name)
             if not _is_within_directory(path, member_path):
                 raise ValueError(f"Unsafe tar member path: {member.name}")

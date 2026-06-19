@@ -58,7 +58,7 @@ def mine_run_metadata(udata, zip_file):
                         method = "IMAC"
                     else:
                         method = method.split(' ')[0]
-                    logging.info(f"CHROMER: Method is {method_match}. Abbreviating... {method}.")
+                    logging.info(f"CHROMER: Method is {method}.")
 
                 date_match = date_re.search(data[1])
                 if date_match:
@@ -82,11 +82,12 @@ def lookup_construct(sample, brain, zip_file):
         return None, sample
 
     construct_name = brain[sample_upper]['ConstructID']
-    construct_re = re.compile(f"{construct_name}[-_]?pVAX1?", re.IGNORECASE)
-    construct_re2 = re.compile(f"{construct_name}[-_]?mc?", re.IGNORECASE)
     if construct_name is None:
         logging.warning(f"CHROMER: SampleID ({sample}) is NOT a batch#. Checking if it's a constructID... (FAILSAFE-1)")
         construct_name = sample
+        construct_re = re.compile(f"{construct_name}[-_]?pVAX1?", re.IGNORECASE)
+        construct_re2 = re.compile(f"{construct_name}[-_]?mc?", re.IGNORECASE)
+        sample = None
         for key in brain:
             if construct_re.match(key):
                 sample = brain[key]['ConstructID']
