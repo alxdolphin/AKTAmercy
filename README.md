@@ -10,14 +10,14 @@ CHROMER is a Python automaton that post-processes chromatographic data from AKTA
 
 - **PyCORN-powered Parsing**: Parses proprietary `.UFol` (*UNICORNS*) archives from UNICORN Evaluation software, using a PyCORN-inspired parser by [Yasar L. Ahmed](https://github.com/pyahmed)
 - **Chromatogram Recognition**: Parses sample name, purification method, and run date from UNICORN exports. Optionally enriches titles with construct metadata via a local index (`brain.json`)
-- **Peak Detection**: Detects peaks in the chromatogram and determines pool fractions based on peak area
+- **Peak Detection**: Detects chromatogram peaks and emits conservative, method-aware pool, verification, or signal-only annotations
 - **Local Output**: Writes compiled chromatograms to timestamped folders under `./data/DONE/`
 
 ## Known Issues and Limitations
 
 - **Sample metadata**: Sample_ID, method, and date are read from the UNICORN run log. Without `brain.json`, CHROMER runs in generic mode and titles chromatograms as `{METHOD}_{SAMPLE}`. With `brain.json`, indexed mode adds construct names to titles when the sample matches the index; unmatched samples still render with a generic title.
 - **Duplicate Logging**: Even without multiprocessing, the log generates duplicate lines for each sample. `chromer parse-log` summarizes warnings when looking for deviants.
-- **Pooling Fractions (AFFINITY)**: The implementation is incomplete, and lacks the ability to enumerate multiple peaks. Some of the pooling ranges are a bit too conservative.
+- **Pooling Fractions**: Pooling annotations are intentionally conservative. Protein A and lectin runs can receive candidate pool labels for a single clear peak; IMAC peaks require fraction verification; SEC and unrecognized methods are treated as signal detection rather than biological pool recommendations.
 - **Plotting**: Revisions to the plotting are likely, to include more information and to make the plots more readable.
 
 Please report any issues you encounter [here](https://github.com/alxdolphin/AKTAmercy/issues), and feel free to contribute to the project by submitting a [pull request](https://github.com/alxdolphin/AKTAmercy/pulls).
