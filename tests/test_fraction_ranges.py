@@ -80,6 +80,18 @@ class PoolingRecommendationTests(unittest.TestCase):
         self.assertEqual("no_signal", recommendation["kind"])
         self.assertEqual("IMAC no clear affinity peak", recommendation["label"])
 
+    def test_affinity_single_peak_without_fractions_requires_manual_review(self):
+        recommendation = get_pooling_recommendation(
+            "PROA",
+            self.x_values,
+            self.y_values,
+            [2],
+            [],
+        )
+
+        self.assertEqual("manual_review", recommendation["kind"])
+        self.assertEqual("PROA peak detected: review manually", recommendation["label"])
+
 
 if __name__ == "__main__":
     unittest.main()

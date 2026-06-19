@@ -5,6 +5,9 @@ AFFINITY_METHODS = {"LEC", "PROA", "IMAC"}
 
 
 def get_fraction_ranges(x_values, y_values, peaks, frac_data):
+    if not frac_data:
+        return []
+
     frac_ranges = []
     for peak in peaks:
         widths = peak_widths(y_values, [peak])[0][0] * 1.5
