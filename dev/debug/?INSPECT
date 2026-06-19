@@ -11,14 +11,12 @@ sys.path.insert(0, repo_root)
 os.chdir(repo_root)
 
 try:
-    from CHROMER import process_chrom
+    from CHROMER import enable_cognition, process_chrom
 
     with open('./config.json', 'r') as f:
         config = json.load(f)
-        
-    brain_path = config['paths']['brain']
-    with open(brain_path, 'r') as f:
-        brain = json.load(f)
+
+    brain = enable_cognition(config['paths']['brain'])
 
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(description='Debug tool for inspecting chromatographic data.')

@@ -250,34 +250,32 @@ def enable_cognition(file_path):
 
 
 ## CHROMATOGRAM META-MINING ##
-def process_chrom(zip_file, brain):
-    if not brain:
-        raise ValueError("brain.json is required for construct recognition")
+_FILENAME_RE = re.compile(r'[bB]#([^-\s]*)', re.IGNORECASE)
 
-    udata = pc_uni7(zip_file)
-    udata.load(show=False)
-    udata.xml_parse(show=False)
-    udata.clean_up()
+def _resolve_sample_from_filename(zip_file):
+    filename = os.path.basename(zip_file)
+    stem, _ = os.path.splitext(filename)
+    filename_match = _FILENAME_RE.search(stem) or _FILENAME_RE.search(filename)
+    if filename_match:
+        return filename_match.group(1).upper()
+    return re.sub(r'[^\w.-]', '_', stem) or None
 
-    method = batch = date = None
+def mine_run_metadata(udata, zip_file):
+    method = sample = date = None
     batch_re = re.compile(r'Set mark "([^-\s]*)"', re.IGNORECASE)
     method_re = re.compile(r'Method:(.*)', re.IGNORECASE)
     date_re = re.compile(r'Method Run ((\d{1,2}/\d{1,2}/\d{4}))')
-    filename_re = re.compile(r'[bB]#([^-\s]*)', re.IGNORECASE)
 
     for key, value in udata.items():
         if key == "Run Log":
             for data in value['data']:
-               
-                # Determine batch
                 batch_match = batch_re.search(data[1])
                 if batch_match and batch_match.group(1):
-                    batch = batch_match.group(1).upper()
-                    logging.info(f"CHROMER: SampleID is {batch}.")
+                    sample = batch_match.group(1).upper()
+                    logging.info(f"CHROMER: SampleID is {sample}.")
                 else:
-                    logging.warning(f"CHROMER: SampleID is BLANK. Skipping... {zip_file}.")
-               
-                # Determine method
+                    logging.warning(f"CHROMER: SampleID is BLANK in run log line. {zip_file}")
+
                 method_match = method_re.search(data[1])
                 if method_match:
                     method = method_match.group(1)
@@ -293,53 +291,84 @@ def process_chrom(zip_file, brain):
                         method = method.split(' ')[0]
                     logging.info(f"CHROMER: Method is {method_match}. Abbreviating... {method}.")
 
-                # Determine date
                 date_match = date_re.search(data[1])
                 if date_match:
                     date = date_match.group(1)
                     logging.info(f"CHROMER: Run date is {date}.")
-                    
-            construct_name = None
-            if batch:
-                batch_upper = batch.upper()
-                if batch_upper in brain:
-                    construct_name = brain[batch_upper]['ConstructID']
-                    construct_re = re.compile(f"{construct_name}[-_]?pVAX1?", re.IGNORECASE)
-                    construct_re2 = re.compile(f"{construct_name}[-_]?mc?", re.IGNORECASE)
-                    if construct_name is None:
-                        logging.warning(f"CHROMER: SampleID ({batch}) is NOT a batch#. Checking if it's a constructID... (FAILSAFE-1) ")
-                        construct_name = batch
-                        for key in brain:
-                            if construct_re.match(key):
-                                batch = brain[key]['ConstructID']
-                                break
-                            elif construct_re2.match(key):
-                                batch = brain[key]['ConstructID']
-                                break
-                        if batch is None:
-                            logging.warning(f"CHROMER: SampleID ({construct_name}) is NOT a construct either. Checking if batch# is in the filename... (FAILSAFE-2)")
-                            filename = os.path.basename(zip_file)
-                            filename_match = filename_re.search(filename)
-                            if filename_match:
-                                batch = filename_match.group(1).upper()
-                                logging.info(f"CHROMER: Batch# matched from filename. Linking to... {batch}.")
-                            else:
-                                logging.warning(f"CHROMER: Construct unrecognizable. Skipping...")
-                                return None
-                    else:
-                        construct_name = construct_name.replace("/", "-")
-                        logging.info(f"CHROMER: Construct recognized as {construct_name}.")
-                else:
-                    logging.warning(f"CHROMER: SampleID ({batch}) was not found in brain.json. Skipping...")
-                    return None
-                
-    Title = (f"{method}_{batch} | {construct_name}")
-    logging.info(f"CHROMER: Success. Assigning index: {Title}")
 
-    if 'udata' not in locals():
-        udata = None
+    if not sample:
+        sample = _resolve_sample_from_filename(zip_file)
+        if sample:
+            logging.info(f"CHROMER: SampleID resolved from filename: {sample}.")
 
-    return {"udata": udata, "method": method, "batch": batch, "date": date, "construct_name": construct_name, "title": Title}
+    return {"method": method, "sample": sample, "date": date}
+
+def lookup_construct(sample, brain, zip_file):
+    if not sample or not brain:
+        return None, sample
+
+    sample_upper = sample.upper()
+    if sample_upper not in brain:
+        return None, sample
+
+    construct_name = brain[sample_upper]['ConstructID']
+    construct_re = re.compile(f"{construct_name}[-_]?pVAX1?", re.IGNORECASE)
+    construct_re2 = re.compile(f"{construct_name}[-_]?mc?", re.IGNORECASE)
+    if construct_name is None:
+        logging.warning(f"CHROMER: SampleID ({sample}) is NOT a batch#. Checking if it's a constructID... (FAILSAFE-1)")
+        construct_name = sample
+        for key in brain:
+            if construct_re.match(key):
+                sample = brain[key]['ConstructID']
+                break
+            elif construct_re2.match(key):
+                sample = brain[key]['ConstructID']
+                break
+        if sample is None:
+            logging.warning(f"CHROMER: SampleID ({construct_name}) is NOT a construct either. Checking if batch# is in the filename... (FAILSAFE-2)")
+            filename_match = _FILENAME_RE.search(os.path.basename(zip_file))
+            if filename_match:
+                sample = filename_match.group(1).upper()
+                logging.info(f"CHROMER: Batch# matched from filename. Linking to... {sample}.")
+            else:
+                logging.warning(f"CHROMER: Construct unrecognizable.")
+                return None, sample
+    else:
+        construct_name = construct_name.replace("/", "-")
+        logging.info(f"CHROMER: Construct recognized as {construct_name}.")
+
+    return construct_name, sample
+
+def format_title(method, sample, construct_name=None):
+    if construct_name:
+        return f"{method}_{sample} | {construct_name}"
+    return f"{method}_{sample}"
+
+assert format_title("SEC", "B01", "Foo-Bar") == "SEC_B01 | Foo-Bar"
+assert format_title("IMAC", "B01") == "IMAC_B01"
+
+def process_chrom(zip_file, brain=None):
+    udata = pc_uni7(zip_file)
+    udata.load(show=False)
+    udata.xml_parse(show=False)
+    udata.clean_up()
+
+    meta = mine_run_metadata(udata, zip_file)
+    if not meta["method"] or not meta["sample"]:
+        logging.warning(f"CHROMER: Could not resolve method/sample for {zip_file}. Skipping...")
+        return None
+
+    construct_name, sample = (None, meta["sample"])
+    if brain:
+        construct_name, sample = lookup_construct(meta["sample"], brain, zip_file)
+        if construct_name is None:
+            logging.warning(f"CHROMER: SampleID ({sample}) not in brain.json. Using generic title.")
+
+    title = format_title(meta["method"], sample, construct_name)
+    logging.info(f"CHROMER: Success. Assigning index: {title}")
+
+    return {"udata": udata, "method": meta["method"], "batch": sample, "date": meta["date"],
+            "construct_name": construct_name, "title": title}
 
 def annotate_fractions(host, frac_data, injection_time=0):
     for i in range(len(frac_data)):
@@ -525,10 +554,10 @@ if __name__ == "__main__":
     pylab.rcParams.update(params)
 
     brain = enable_cognition(config['paths']['brain'])
-    if not brain:
-        logging.error("CHROMER: brain.json missing or invalid. Chromatogram recognition disabled.")
-        # ponytail: local brain.json is required until construct recognition becomes optional.
-        raise SystemExit(1)
+    if brain:
+        logging.info("CHROMER: Indexed mode (brain.json loaded).")
+    else:
+        logging.info("CHROMER: Generic mode (no brain.json). Construct enrichment disabled.")
             
     all_files = []
     processed_files = set()  # set to keep track of processed files

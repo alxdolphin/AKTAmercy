@@ -16,11 +16,13 @@ JPGs. There is no server, web UI, or test/lint suite in the repo.
 ### Running the app
 - The app is headless-friendly: set `MPLBACKEND=Agg` to render without a display.
 - It reads inputs from `./data/DROP-OFF/` and writes JPGs to
-  `./data/DONE/<timestamp>/<METHOD>_<BATCH> | <ConstructID>.jpg`. Logs go to
-  `./dev/debug/logs/`.
-- Required-but-gitignored inputs (not in the repo): `brain.json` (batch->construct index;
-  see README "Construct Index" for schema) and `.Result`/`.UFol` files under
-  `./data/DROP-OFF/`. Without them the run does nothing useful.
+  `./data/DONE/<timestamp>/<METHOD>/`. Filenames are `{METHOD}_{SAMPLE}.jpg` in
+  generic mode, or `{METHOD}_{SAMPLE} | {ConstructID}.jpg` when indexed enrichment
+  matches. Logs go to `./dev/debug/logs/`.
+- Optional gitignored input: `brain.json` (batch→construct index; see README
+  "Construct Index"). `.Result`/`.UFol` files under `./data/DROP-OFF/` are also
+  gitignored. Without export files the run does nothing useful; without
+  `brain.json` CHROMER still runs in generic mode.
 - `process_file()` calls `os.remove()` on each `.Result` after processing, so a
   `.Result` placed in `DROP-OFF` is consumed on the first run — re-create it to re-run.
 
