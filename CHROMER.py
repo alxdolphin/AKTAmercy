@@ -33,6 +33,68 @@ import seaborn as sns # For some additional plotting functionality
 from mpl_toolkits.axes_grid1 import host_subplot
 from scipy.signal import find_peaks, peak_widths # For peak detection
 
+MARKER_BYTE = 0x0B
+LEGACY_DATA_OFFSET = 47
+LEGACY_TAIL_BYTES = 48
+MAX_REASONABLE_FLOAT_COUNT = 10_000_000  # ponytail: reject garbage int32 matches
+
+def _decode_legacy_offset(blob):
+    read_size = len(blob) - LEGACY_TAIL_BYTES
+    return [
+        struct.unpack("<f", blob[i:i + 4])[0]
+        for i in range(LEGACY_DATA_OFFSET, read_size, 4)
+    ]
+
+def _try_marker_decode(blob):
+    idx = blob.find(bytes([MARKER_BYTE]))
+    while idx != -1:
+        if idx >= 4:
+            count = struct.unpack("<i", blob[idx - 4:idx])[0]
+            payload_start = idx + 1
+            payload_end = payload_start + count * 4
+            if (
+                0 < count <= MAX_REASONABLE_FLOAT_COUNT
+                and payload_end <= len(blob)
+            ):
+                return [
+                    struct.unpack("<f", blob[i:i + 4])[0]
+                    for i in range(payload_start, payload_end, 4)
+                ]
+        idx = blob.find(bytes([MARKER_BYTE]), idx + 1)
+    return None
+
+def decode_float_payload(blob):
+    """Return (floats, decoder_name). decoder_name is 'marker' or 'legacy'."""
+    marker_values = _try_marker_decode(blob)
+    if marker_values is not None:
+        logging.info(
+            "CHROMER: decode_float_payload marker decoder (count=%d, blob_len=%d)",
+            len(marker_values),
+            len(blob),
+        )
+        return marker_values, "marker"
+
+    legacy_values = _decode_legacy_offset(blob)
+    logging.info(
+        "CHROMER: decode_float_payload legacy decoder (count=%d, blob_len=%d)",
+        len(legacy_values),
+        len(blob),
+    )
+    return legacy_values, "legacy"
+
+def validate_chrom_pair_lengths(chrom_key, chrom_dict):
+    volumes = chrom_dict.get("CoordinateData.Volumes")
+    amplitudes = chrom_dict.get("CoordinateData.Amplitudes")
+    if not isinstance(volumes, list) or not isinstance(amplitudes, list):
+        return
+    if len(volumes) != len(amplitudes):
+        logging.warning(
+            "CHROMER: length mismatch in %s: volumes=%d amplitudes=%d",
+            chrom_key,
+            len(volumes),
+            len(amplitudes),
+        )
+
 ## PyCORN - UNI7 HACK ##
 class pc_uni7(OrderedDict):
     '''
@@ -117,6 +179,7 @@ class pc_uni7(OrderedDict):
                     x = self.unpacker(self[i][n])
                 tmp_dict = {n:x}
                 self[i].update(tmp_dict)
+            validate_chrom_pair_lengths(i, self[i])
         if show:
             print("Finished decoding x/y-data!")
 
@@ -138,13 +201,8 @@ class pc_uni7(OrderedDict):
         udataut = data block
         output = list of values
         '''
-        read_size = len(udata) - 48
-        values = []
-        for i in range(47, read_size, 4):
-            x = struct.unpack("<f", udata[i:i+4])
-            x = x[0]
-            values.append(x)
-        return(values)
+        values, _decoder = decode_float_payload(udata)
+        return values
    
     def xml_parse(self,show=False):
         '''
