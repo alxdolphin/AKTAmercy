@@ -1,7 +1,10 @@
 from scipy.signal import peak_widths
 
 
-AFFINITY_METHODS = {"LEC", "PROA", "IMAC"}
+POOL_CANDIDATE_METHODS = {"LEC", "PROA"}
+VERIFY_METHODS = {"IMAC"}
+SIGNAL_ONLY_METHODS = {"SEC"}
+KNOWN_METHODS = POOL_CANDIDATE_METHODS | VERIFY_METHODS | SIGNAL_ONLY_METHODS
 
 
 def get_fraction_ranges(x_values, y_values, peaks, frac_data):
@@ -23,21 +26,28 @@ def get_fraction_ranges(x_values, y_values, peaks, frac_data):
 def get_pooling_recommendation(method, x_values, y_values, peaks, frac_data):
     method_label = method or "Unknown"
     if not peaks:
-        peak_type = "affinity peak" if method in AFFINITY_METHODS else "signal peak"
+        signal_type = "method-specific signal" if method in KNOWN_METHODS else "signal peak"
         return {
             "kind": "no_signal",
-            "label": f"{method_label} no clear {peak_type}",
+            "label": f"{method_label} no clear {signal_type}",
             "ranges": [],
         }
 
-    if method == "SEC":
+    if method in SIGNAL_ONLY_METHODS:
         return {
             "kind": "signal_only",
             "label": "SEC peak detected: signal only",
             "ranges": [],
         }
 
-    if method not in AFFINITY_METHODS:
+    if method in VERIFY_METHODS:
+        return {
+            "kind": "verify",
+            "label": f"{method_label} peak detected: verify fractions",
+            "ranges": [],
+        }
+
+    if method not in POOL_CANDIDATE_METHODS:
         return {
             "kind": "signal_only",
             "label": f"{method_label} peak detected: no method-specific pool",
@@ -60,9 +70,10 @@ def get_pooling_recommendation(method, x_values, y_values, peaks, frac_data):
         }
 
     frac_range = frac_ranges[0][0]
+    pool_context = "glycoprotein" if method == "LEC" else "capture"
     return {
         "kind": "pool",
-        "label": f"Conservative {method_label} pool: {frac_range}",
+        "label": f"Candidate {method_label} {pool_context} pool: {frac_range}",
         "ranges": frac_ranges,
     }
 
