@@ -8,7 +8,7 @@ import seaborn as sns
 from mpl_toolkits.axes_grid1 import host_subplot
 from scipy.signal import find_peaks
 
-from chromer.fractions import annotate_fraction_ranges, get_fraction_ranges
+from chromer.fractions import get_pooling_recommendation
 
 
 def annotate_fractions(host, frac_data, injection_time=0):
@@ -55,17 +55,27 @@ def save_plot(title, method_folder):
     logging.info(f"CHROMER: Saved chromatogram to {filename}")
 
 
-def annotate_no_expression(host):
+def annotate_no_expression(host, label='NO / LOW EXPRESSION'):
     host.text(
-        0.5, 0.5, 'NO / LOW EXPRESSION',
+        0.5, 0.5, label,
         fontsize=50, fontweight='bold', color='red',
         ha='center', va='center', alpha=0.5, rotation=45,
         transform=host.transAxes,
     )
 
 
-def annotate_multiple_peaks(host):
-    host.text(1, 1.05, 'MULTI', ha='right', va='top', transform=host.transAxes, fontsize=24, fontweight='bold', color='black')
+def annotate_pooling_recommendation(host, recommendation):
+    host.text(
+        1,
+        1.05,
+        recommendation["label"],
+        ha='right',
+        va='top',
+        transform=host.transAxes,
+        fontsize=18,
+        fontweight='bold',
+        color='black',
+    )
 
 
 def apply_plotting_params(params):
@@ -125,13 +135,17 @@ def chromeunicorns(zip_file, udata_info, method_folder):
     if 'Fractions' in udata:
         annotate_fractions(host, udata['Fractions']['data'], injection_time)
 
+    recommendation = get_pooling_recommendation(
+        method,
+        x_values,
+        y_values,
+        peaks,
+        udata.get('Fractions', {}).get('data', []),
+    )
     if not peaks:
-        annotate_no_expression(host)
-    elif len(peaks) > 1 and method != "SEC" and method != "IMAC":
-        annotate_multiple_peaks(host)
-    elif 'Fractions' in udata and method != "SEC" and method != "IMAC":
-        frac_ranges = get_fraction_ranges(x_values, y_values, peaks, udata['Fractions']['data'])
-        annotate_fraction_ranges(host, frac_ranges)
+        annotate_no_expression(host, recommendation["label"])
+    else:
+        annotate_pooling_recommendation(host, recommendation)
 
     host.set_title(title, loc='left', fontsize=24, fontweight='bold', color='black', pad=20)
     host.legend(fancybox=True, framealpha=1, shadow=True, borderpad=1, fontsize=22, loc='upper right', edgecolor='black')
