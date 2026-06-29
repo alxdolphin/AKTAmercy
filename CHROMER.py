@@ -17,6 +17,7 @@ import os # For file IO
 import re # For parsing dictionary keys for chomatogram metadata (batch, method, etc.)
 import struct 
 import tarfile # For extracting UFol files
+from dataclasses import dataclass
 # import tempfile # For creating temporary directories | Not used - may be useful in the future, but max coverage is goal for now
 
 ## IMPORTS - PyCORN-SPECIFIC ##
@@ -32,6 +33,12 @@ import mpl_toolkits.axisartist as AA
 import seaborn as sns # For some additional plotting functionality
 from mpl_toolkits.axes_grid1 import host_subplot
 from scipy.signal import find_peaks, peak_widths # For peak detection
+
+POOL_CANDIDATE_METHODS = frozenset({"PROA", "LEC"})
+VERIFY_METHODS = frozenset({"IMAC"})
+SIGNAL_ONLY_METHODS = frozenset({"SEC"})
+
+IGG_FC_PATTERN = re.compile(r"IgG1| IgG|_IgG|CHIg|CLIg|_Fc|huFc", re.IGNORECASE)
 
 ## PyCORN - UNI7 HACK ##
 class pc_uni7(OrderedDict):
@@ -259,7 +266,7 @@ def process_chrom(zip_file, brain):
     udata.xml_parse(show=False)
     udata.clean_up()
 
-    method = batch = date = None
+    method = batch = date = construct_meta = None
     batch_re = re.compile(r'Set mark "([^-\s]*)"', re.IGNORECASE)
     method_re = re.compile(r'Method:(.*)', re.IGNORECASE)
     date_re = re.compile(r'Method Run ((\d{1,2}/\d{1,2}/\d{4}))')
@@ -303,7 +310,8 @@ def process_chrom(zip_file, brain):
             if batch:
                 batch_upper = batch.upper()
                 if batch_upper in brain:
-                    construct_name = brain[batch_upper]['ConstructID']
+                    construct_meta = brain[batch_upper]
+                    construct_name = construct_meta['ConstructID']
                     construct_re = re.compile(f"{construct_name}[-_]?pVAX1?", re.IGNORECASE)
                     construct_re2 = re.compile(f"{construct_name}[-_]?mc?", re.IGNORECASE)
                     if construct_name is None:
@@ -339,7 +347,15 @@ def process_chrom(zip_file, brain):
     if 'udata' not in locals():
         udata = None
 
-    return {"udata": udata, "method": method, "batch": batch, "date": date, "construct_name": construct_name, "title": Title}
+    return {
+        "udata": udata,
+        "method": method,
+        "batch": batch,
+        "date": date,
+        "construct_name": construct_name,
+        "construct_meta": construct_meta or {},
+        "title": Title,
+    }
 
 def annotate_fractions(host, frac_data, injection_time=0):
     for i in range(len(frac_data)):
@@ -367,12 +383,6 @@ def save_plot(Title, method_folder):
     logging.info(f"CHROMER: Saved chromatogram to {filename}")
 
     
-def annotate_no_expression(host):
-    host.text(0.5, 0.5, 'NO / LOW EXPRESSION', fontsize=50, fontweight='bold', color='red', ha='center', va='center', alpha=0.5, rotation=45, transform=host.transAxes)
-
-def annotate_multiple_peaks(host):
-    host.text(1, 1.05, 'MULTI', ha='right', va='top', transform=host.transAxes, fontsize=24, fontweight='bold', color='black')
-
 def get_fraction_ranges(x_values, y_values, peaks, frac_data):
     frac_ranges = []
     for peak in peaks:
@@ -385,9 +395,100 @@ def get_fraction_ranges(x_values, y_values, peaks, frac_data):
             frac_ranges.append((f"{frac_start}-{frac_end}", end))
     return sorted(frac_ranges, key=lambda x: x[1])
 
-def annotate_fraction_ranges(host, frac_ranges):
-    for i, (frac_range, end_frac_index) in enumerate(frac_ranges):
-        host.text(1, 1.05, frac_range, ha='right', va='top', transform=host.transAxes, fontsize=24, fontweight='bold', color='black')
+@dataclass
+class SignalResult:
+    has_peak: bool
+    peak_count: int
+    frac_ranges: list
+    is_multi: bool
+
+def detect_uv280_signal(x_values, y_values, peaks, frac_data, method):
+    peak_count = len(peaks)
+    has_peak = peak_count > 0
+    frac_ranges = []
+    if has_peak and method in POOL_CANDIDATE_METHODS and frac_data:
+        frac_ranges = [
+            label for label, _ in get_fraction_ranges(x_values, y_values, peaks, frac_data)
+        ]
+    is_multi = has_peak and peak_count > 1 and method in POOL_CANDIDATE_METHODS
+    return SignalResult(
+        has_peak=has_peak,
+        peak_count=peak_count,
+        frac_ranges=frac_ranges,
+        is_multi=is_multi,
+    )
+
+def _is_igg_fc_target(construct_meta):
+    target_class = construct_meta.get("TargetClass")
+    if target_class in ("IgG", "Fc"):
+        return True
+    construct_id = construct_meta.get("ConstructID", "")
+    return bool(IGG_FC_PATTERN.search(construct_id))
+
+def _format_pool_candidate_label(method, signal, construct_meta, default_single, default_multi, upgraded_single, upgraded_multi):
+    ranges_text = ", ".join(signal.frac_ranges)
+    use_upgrade = False
+    if method == "PROA":
+        use_upgrade = _is_igg_fc_target(construct_meta) and signal.frac_ranges
+    elif method == "LEC":
+        use_upgrade = construct_meta.get("TargetClass") == "glycoprotein" and signal.frac_ranges
+
+    if use_upgrade:
+        if signal.is_multi:
+            return f"MULTI — {upgraded_multi}: {ranges_text}"
+        return f"{upgraded_single}: {signal.frac_ranges[0]}"
+
+    if signal.is_multi:
+        return f"MULTI — {default_multi}: {ranges_text}"
+    if signal.frac_ranges:
+        return f"{default_single}: {signal.frac_ranges[0]}"
+    return "UV280 peak detected: verify target-containing fractions"
+
+def format_interpretation_label(method, signal, construct_meta=None):
+    construct_meta = construct_meta or {}
+    if not signal.has_peak:
+        return "No clear UV280 elution peak"
+
+    if method == "PROA":
+        return _format_pool_candidate_label(
+            method,
+            signal,
+            construct_meta,
+            "Candidate Protein A elution fraction",
+            "Candidate Protein A elution fractions",
+            "Candidate IgG/Fc capture fraction",
+            "Candidate IgG/Fc capture fractions",
+        )
+    if method == "LEC":
+        return _format_pool_candidate_label(
+            method,
+            signal,
+            construct_meta,
+            "Candidate lectin-binding fraction",
+            "Candidate lectin-binding fractions",
+            "Candidate glycoprotein pool",
+            "Candidate glycoprotein pool",
+        )
+    if method in VERIFY_METHODS:
+        return "IMAC UV280 peak detected: verify target-containing fractions"
+    if method in SIGNAL_ONLY_METHODS:
+        return "SEC UV280 peak detected: signal only; verify identity/oligomeric state separately"
+    return "UV280 peak detected: verify target-containing fractions"
+
+def annotate_summary(host, label):
+    fontsize = 16 if len(label) > 60 else 18
+    host.text(
+        1,
+        1.05,
+        label,
+        ha="right",
+        va="top",
+        transform=host.transAxes,
+        fontsize=fontsize,
+        fontweight="bold",
+        color="black",
+        wrap=True,
+    )
 
 def chromeunicorns(zip_file, udata_INFO, method_folder):
     udata = udata_INFO['udata']
@@ -417,10 +518,10 @@ def chromeunicorns(zip_file, udata_INFO, method_folder):
             plot_data(host, x_values, y_values)
     
     
-    if 'Fractions' in udata and method != "SEC":
+    if 'Fractions' in udata and method not in SIGNAL_ONLY_METHODS:
         xlim_min = udata['Fractions']['data'][0][0]
         xlim_max = udata['Fractions']['data'][-1][0]
-    elif method == "SEC":
+    elif method in SIGNAL_ONLY_METHODS:
         xlim_min = 0
         xlim_max = 30
             
@@ -436,18 +537,14 @@ def chromeunicorns(zip_file, udata_INFO, method_folder):
     peaks = [peak for peak in peaks if xlim_min <= x_values[peak] <= xlim_max]
     annotate_peaks(host, x_values, y_values, peaks)
 
-    if 'Fractions' in udata:
-        annotate_fractions(host, udata['Fractions']['data'], injection_time)
+    frac_data = udata['Fractions']['data'] if 'Fractions' in udata else None
+    if frac_data:
+        annotate_fractions(host, frac_data, injection_time)
 
-    if not peaks:
-        annotate_no_expression(host)
-    elif len(peaks) > 1 and method != "SEC" and method != "IMAC":
-        annotate_multiple_peaks(host)
-    else:
-        if 'Fractions' in udata and method != "SEC" and method != "IMAC":
-            frac_ranges = get_fraction_ranges(x_values, y_values, peaks, udata['Fractions']['data'])
-            annotate_fraction_ranges(host, frac_ranges)
-            
+    signal = detect_uv280_signal(x_values, y_values, peaks, frac_data, method)
+    label = format_interpretation_label(method, signal, udata_INFO.get("construct_meta"))
+    annotate_summary(host, label)
+
     host.set_title(Title, loc='left', fontsize=24, fontweight='bold', color='black', pad=20)
     host.legend(fancybox=True, framealpha=1, shadow=True, borderpad=1, fontsize=22, loc='upper right', edgecolor='black') 
     host.set_xlabel('Elution volume (ml)')

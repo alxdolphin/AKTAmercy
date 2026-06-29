@@ -83,8 +83,28 @@ CHROMER maps batch numbers to construct metadata via `./brain.json`. Each entry 
 | `ConstructID` | Construct name used in chromatogram titles |
 | `Ext/1000` | Extinction coefficient (×1000) |
 | `MW/1000` | Molecular weight (×1000) |
+| `TargetClass` | Optional. When set to `IgG` or `Fc`, Protein A runs use stronger capture-pool wording. When set to `glycoprotein`, Lectin runs use glycoprotein-pool wording. Omit to keep cautious candidate-fraction labels. |
 
 Maintain `brain.json` manually or export from your lab's tracking system. CHROMER loads this file at startup and does not fetch remote updates.
+
+## Chromatogram Annotations
+
+CHROMER separates UV280 signal detection from biological interpretation on each plot:
+
+1. **Signal** — peak volume/absorbance markers and, for Protein A / Lectin runs, candidate elution fraction ranges derived from peak width.
+2. **Interpretation** — a method-specific summary line in the top-right corner.
+
+Default summary labels are cautious and do not assume target identity unless metadata supports it:
+
+| Method | Summary label (typical) |
+| --- | --- |
+| Protein A | `Candidate Protein A elution fraction: A1-A2` |
+| Lectin | `Candidate lectin-binding fraction: A1-A2` |
+| IMAC | `IMAC UV280 peak detected: verify target-containing fractions` |
+| SEC | `SEC UV280 peak detected: signal only; verify identity/oligomeric state separately` |
+| No peak | `No clear UV280 elution peak` |
+
+Multiple peaks on Protein A / Lectin runs are labeled `MULTI —` with all candidate fraction ranges listed. Protein A runs may upgrade to IgG/Fc capture wording when `TargetClass` is set or when the construct name matches high-confidence IgG/Fc patterns.
 
 ## Configuration
 
