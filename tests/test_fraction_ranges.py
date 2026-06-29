@@ -1,6 +1,6 @@
 import unittest
 
-from CHROMER import get_fraction_ranges
+from chromer.fractions import get_fraction_ranges
 
 
 class FractionRangeTests(unittest.TestCase):

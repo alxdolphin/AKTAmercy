@@ -56,7 +56,7 @@ Protein Queue.xlsx is not read at runtime.
 
 ## Data flow
 
-`process_chrom()` returns `construct_meta` from `brain.json`. `chromeunicorns()` calls `detect_uv280_signal()` then `format_interpretation_label()` then `annotate_summary()`.
+`process_chrom()` in `src/chromer/metadata.py` returns `construct_meta` from `brain.json`. `chromeunicorns()` in `src/chromer/plotting.py` calls `detect_uv280_signal()` and `format_interpretation_label()` from `src/chromer/fractions.py`, then `annotate_summary()`.
 
 ## Out of scope
 

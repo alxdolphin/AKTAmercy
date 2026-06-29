@@ -1,6 +1,6 @@
 import unittest
 
-from CHROMER import SignalResult, detect_uv280_signal, format_interpretation_label
+from chromer.fractions import SignalResult, detect_uv280_signal, format_interpretation_label
 
 
 def _signal(has_peak, peak_count=0, frac_ranges=None, is_multi=False):
